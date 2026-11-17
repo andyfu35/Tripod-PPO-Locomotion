@@ -174,6 +174,29 @@ class TestOriginalH2K6Tripod(unittest.TestCase):
         self.assertEqual(r["used"],3)
         self.assertTrue(all(x["censored"] for x in r["results"]))
 
+    def test_de_novo_charged_parent_replay_does_not_overwrite_archive_parent(self):
+        rng=np.random.default_rng(119)
+        bank=PAESArchive()
+        parent=Gene("g0",random_parameters(rng),PrivatePsi("g0","g0"))
+        parent.progress,parent.longevity,parent.reward,parent.steps=.8,.95,.75,950
+        bank.commit_batch([parent],rng)
+        before=(parent.progress,parent.longevity,parent.reward,parent.steps)
+        child=Gene("g1",random_parameters(rng),PrivatePsi("g1","g1"))
+        entries=[dict(parent=parent,child=child,seed=None,signed_scale=None,
+                      mode="de_novo",reset_seed=88)]
+        results=[{"used":42,"pair_seed":88,"parent_id":"g0","child_id":"g1",
+                  "results":[{"completed":True,"censored":False,"distance":0.,"steps":20,"fell":True,"reward":3.8},
+                             {"completed":True,"censored":False,"distance":2.,"steps":22,"fell":True,"reward":5.2}]}]
+        history=[]
+        commit_results(entries,results,bank=bank,rng=rng,histories=history,
+                       steps_used=42,best_reward=None)
+        self.assertEqual((parent.progress,parent.longevity,parent.reward,parent.steps),before)
+        self.assertEqual(len(parent.psi.evidence),0)
+        self.assertEqual(len(history),1)
+        self.assertEqual(history[0]["mode"],"de_novo")
+        self.assertEqual(history[0]["gene_id"],"g1")
+        self.assertEqual(child.psi.lineage,"g1")
+
     def test_rejected_offspring_updates_parent_private_psi(self):
         rng=np.random.default_rng(20)
         bank=PAESArchive()

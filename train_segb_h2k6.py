@@ -210,7 +210,8 @@ def commit_results(entries: list[dict], results: list[dict], *,
     for e, result in zip(entries, results):
         parent, child = e["parent"], e["child"]
         parent_result, child_result = result["results"]
-        if e["mode"] in ("founder", "de_novo"):
+        if e["mode"] == "founder":
+            # Before a bank exists, both paired worlds test NEW founders.
             for g, r in zip((parent, child), (parent_result, child_result)):
                 if r["completed"]:
                     score_gene(g, r, HORIZON, result["pair_seed"])
@@ -218,11 +219,27 @@ def commit_results(entries: list[dict], results: list[dict], *,
                     if best_reward is None or g.reward > best_reward.reward:
                         best_reward = g
                 histories.append({"gene_id": g.id, "parent_id": "",
-                                  "mode": e["mode"], "steps": r["steps"],
+                                  "mode": "founder", "steps": r["steps"],
                                   "fell": int(r["fell"]), "censored": int(r["censored"]),
                                   "progress_mps": r["distance"]/(1000*.02),
                                   "life_fraction": r["steps"]/1000,
                                   "physics_steps_total": steps_used})
+        elif e["mode"] == "de_novo":
+            # The accompanying parent run is a charged baseline only: it is
+            # NOT a new Gene. Preserve its stored bank fitness and private psi.
+            r = child_result
+            if r["completed"]:
+                score_gene(child, r, HORIZON, result["pair_seed"])
+                proposals.append(child)
+                if best_reward is None or child.reward > best_reward.reward:
+                    best_reward = child
+            histories.append({"gene_id": child.id, "parent_id": "",
+                              "mode": "de_novo", "steps": r["steps"],
+                              "parent_steps": parent_result["steps"],
+                              "fell": int(r["fell"]), "censored": int(r["censored"]),
+                              "progress_mps": r["distance"]/(1000*.02),
+                              "life_fraction": r["steps"]/1000,
+                              "physics_steps_total": steps_used})
         else:
             if parent_result["completed"] and child_result["completed"]:
                 score_gene(child, child_result, 1000, result["pair_seed"])
