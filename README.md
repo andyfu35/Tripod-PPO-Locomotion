@@ -72,10 +72,7 @@ Model files, checkpoints and rendered videos remain local and are ignored by Git
 
 ## Robot blueprint
 
-![Radial tripod structure](tripod_blueprint.svg)
-
-The PNG version can be regenerated locally using `python3 draw_blueprint.py`
-after dependencies have been installed.
+Run `python3 draw_blueprint.py` after installing dependencies to regenerate the robot blueprint locally.
 
 ## Verification status
 
