@@ -97,3 +97,7 @@ If the original SEGB policy repeatedly falls within one second, consult [README_
 ## SEGB H2-K6: inherited private history (5M control steps)
 
 This experiment branch provides the original H2-K6 per-Gene historical learning adapted to tripod physics. It restores all signed positive/negative private evidence, same-reset paired parent/child tests and genealogy-preserving inheritance, without changing PPO or the successful original robot environment. Run `bash run_segb_h2k6_5m.sh` or see [README_SEGB_H2K6.md](README_SEGB_H2K6.md).
+
+## Extend H2-K6 from 5M to 10M (preserve each Gene's private history)
+
+Run `bash run_segb_h2k6_continue.sh` from the repository root to continue a completed 5-million-step H2-K6 checkpoint into a separate 10-million-step output directory. It strictly preserves the MuJoCo model, reward, GRU, private history, signed direction evidence and RNG state, then compares the policies on the same held-out seeds and optionally PPO. See [README_SEGB_CONTINUATION.md](README_SEGB_CONTINUATION.md) for the exact workflow and optional 10M-to-20M continuation.

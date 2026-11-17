@@ -301,13 +301,32 @@ def save_checkpoint(path: Path, *, cfg: Config, robot_hash: str,
     tmp.replace(path)
 
 
-def load_checkpoint(path: Path, *, cfg: Config, robot_hash: str):
+# These are execution/reporting fields, not evolutionary parameters. Only an
+# explicit continuation from a *different* checkpoint may alter them.
+CONTINUATION_FIELDS = frozenset({"total_steps", "output", "checkpoint_every"})
+
+
+def load_checkpoint(path: Path, *, cfg: Config, robot_hash: str,
+                    allow_extension: bool = False):
     with np.load(path, allow_pickle=False) as f:
         matrix = np.asarray(f["params"], dtype=np.float32)
         meta = json.loads(str(f["meta"].item()))
-    if (meta.get("version") != "tripod_h2k6_private_psi_1"
-            or meta["config"] != asdict(cfg) or meta["robot_hash"] != robot_hash):
-        raise ValueError("H2-K6 checkpoint/config or robot XML mismatch")
+    if meta.get("version") != "tripod_h2k6_private_psi_1" or meta.get("robot_hash") != robot_hash:
+        raise ValueError("H2-K6 checkpoint version or robot XML mismatch")
+    stored = meta["config"]
+    requested = asdict(cfg)
+    if allow_extension:
+        mismatches = [key for key in requested if key not in CONTINUATION_FIELDS
+                      and stored.get(key) != requested[key]]
+        if mismatches:
+            raise ValueError(f"Cannot change evolutionary settings on continuation: {mismatches}")
+        # Read the exact ledger, not the user-supplied source directory name.
+        if int(meta["steps"]) < 1 or cfg.total_steps <= int(meta["steps"]):
+            raise ValueError("Continuation target must exceed the checkpoint's executed steps")
+        if int(meta["steps"]) > int(stored["total_steps"]):
+            raise ValueError("Source checkpoint exceeds its recorded budget")
+    elif stored != requested:
+        raise ValueError("H2-K6 checkpoint/config mismatch; same-run resumes must match exactly")
     bank = PAESArchive(cfg.archive_capacity, cfg.archive_depth)
     all_genes = [Gene.restore(d, p) for d,p in zip(meta["records"],matrix)]
     for g in all_genes[:meta["bank_size"]]:
@@ -357,16 +376,43 @@ def summarize(output: Path, cfg: Config, bank: PAESArchive,
                     "max_generation","history_event_count")},indent=2))
 
 
-def train(cfg: Config, *, pool=None, verbose: bool = True):
+def train(cfg: Config, *, pool=None, verbose: bool = True,
+          resume_from: Path | str | None = None):
     cfg.validate()
     out=Path(cfg.output)
     out.mkdir(parents=True,exist_ok=True)
     ckpt=out/"checkpoint.npz"
     robot_hash=sha256(MODEL_PATH.read_bytes()).hexdigest()
     if ckpt.exists():
+        # Local in-progress continuation always takes precedence. Do not replay
+        # the original 5M checkpoint if this output directory was interrupted.
         bank,rng,steps,next_id,batch,history,best=load_checkpoint(
             ckpt,cfg=cfg,robot_hash=robot_hash)
         if verbose:print(f"Resuming H2-K6 from {steps:,} steps")
+    elif resume_from is not None:
+        if (out/"summary.json").exists():
+            raise FileExistsError("Destination contains a summary without a checkpoint")
+        source=Path(resume_from).expanduser().resolve()
+        if not source.is_file():
+            raise FileNotFoundError(f"Source checkpoint does not exist: {source}")
+        if source==ckpt.resolve():
+            raise ValueError("Use a different output directory to preserve the source checkpoint")
+        bank,rng,steps,next_id,batch,history,best=load_checkpoint(
+            source,cfg=cfg,robot_hash=robot_hash,allow_extension=True)
+        # Save a new destination checkpoint before starting physics. The source
+        # checkpoint, source champions and source summary remain byte-for-byte intact.
+        save_checkpoint(ckpt,cfg=cfg,robot_hash=robot_hash,bank=bank,
+                        rng=rng,steps=steps,next_id=next_id,batch=batch,
+                        history=history,best=best)
+        provenance={"source_checkpoint":str(source),
+                    "source_sha256":sha256(source.read_bytes()).hexdigest(),
+                    "source_steps":steps,"target_steps":cfg.total_steps,
+                    "source_remains_unchanged":True,
+                    "changed_config_fields":sorted(CONTINUATION_FIELDS)}
+        (out/"continuation_provenance.json").write_text(
+            json.dumps(provenance,indent=2)+"\n",encoding="utf-8")
+        if verbose:print(f"Extended H2-K6 from {steps:,} to {cfg.total_steps:,} steps; "
+                         f"private psi and RNG restored from {source}",flush=True)
     else:
         if (out/"summary.json").exists():
             raise FileExistsError("Output run exists without checkpoint; use new directory")
@@ -431,10 +477,13 @@ def main():
     p.add_argument("--seed",type=int,default=0)
     p.add_argument("--out-dir",default="runs_segb_h2k6_5m_seed0")
     p.add_argument("--checkpoint-every",type=int,default=250_000)
+    p.add_argument("--resume-from",type=Path,default=None,
+                   help="Continue from an existing completed/interrupted H2-K6 checkpoint "
+                        "to a NEW output directory and a larger cumulative budget")
     args=p.parse_args()
     cfg=Config(total_steps=args.total_steps,worlds=args.worlds,seed=args.seed,
                output=args.out_dir,checkpoint_every=args.checkpoint_every)
-    train(cfg)
+    train(cfg,resume_from=args.resume_from)
 
 
 if __name__=="__main__":
