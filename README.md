@@ -78,3 +78,14 @@ Run `python3 draw_blueprint.py` after installing dependencies to regenerate the 
 
 Structural and math tests passed when packaged; real MuJoCo physics and
 5-million-step PPO training must be run and verified on the host computer.
+
+## SEGB 5-million-step comparison
+
+An additional SEGB tripod experiment is provided without modifying the successful PPO training setup. See [README_SEGB.md](README_SEGB.md) for the Gene Bank rules, identical environment/action/reward definitions and exact interaction ledger.
+
+```bash
+source .venv/bin/activate
+bash run_segb_5m.sh
+```
+
+It evolves 5,000 candidate policies on 16 CPU MuJoCo worlds for exactly 5,000,000 training control steps, using PAES-style archive density, Q^2 parent sampling, 80% inheritance mutation / 20% de novo. PPO Experiment C remains intact. Compare both methods with the same held-out seeds using `compare_ppo_segb.py`.
