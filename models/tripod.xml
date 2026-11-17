@@ -1,0 +1,94 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mujoco model="radial_tripod_12dof">
+  <compiler angle="degree" autolimits="true" />
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast" solver="Newton" iterations="50" />
+  <default>
+    <joint type="hinge" damping="0.4" armature="0.003" limited="true" />
+    <geom contype="1" conaffinity="1" friction="1.25 0.005 0.0001" condim="3" />
+  </default>
+  <visual>
+    <global offwidth="1280" offheight="720" />
+    <headlight ambient="0.45 0.45 0.45" diffuse="0.65 0.65 0.65" specular="0.08 0.08 0.08" />
+    <map znear="0.01" />
+    <quality shadowsize="2048" />
+  </visual>
+  <worldbody>
+    <light pos="0 -1.5 2.8" dir="0 0 -1" directional="true" />
+    <geom name="ground" type="plane" size="10 10 0.1" rgba="0.82 0.85 0.87 1" friction="1.3 0.005 0.0001" />
+    <body name="torso" pos="0 0 0.46">
+      <freejoint name="root" />
+      <geom name="chassis" type="cylinder" pos="0 0 0" size="0.15 0.042" mass="1.20" rgba="0.18 0.23 0.34 1" />
+      <geom name="chassis_top" type="cylinder" pos="0 0 0.045" size="0.11 0.004" mass="0.04" rgba="0.32 0.39 0.51 1" contype="0" conaffinity="0" />
+      <geom name="forward_marker" type="box" pos="0.105 0 0.052" size="0.025 0.012 0.006" mass="0.004" rgba="0.96 0.96 0.96 1" contype="0" conaffinity="0" />
+      <site name="torso_center" size="0.01" rgba="1 1 1 1" />
+      <body name="leg_a_hip_yaw" pos="0.1590000 0.0000000 -0.015" euler="0 0 0">
+        <joint name="leg_a_yaw" axis="0 0 1" range="-55 55" />
+        <geom type="sphere" size="0.026" mass="0.075" rgba="0.22 0.67 0.94 1" contype="0" conaffinity="0" />
+        <body name="leg_a_hip_roll">
+          <joint name="leg_a_roll" axis="1 0 0" range="-45 45" />
+          <geom type="sphere" size="0.022" mass="0.055" rgba="0.22 0.67 0.94 1" contype="0" conaffinity="0" />
+          <body name="leg_a_hip_pitch">
+            <joint name="leg_a_pitch" axis="0 1 0" range="-75 75" />
+            <geom name="leg_a_thigh" type="capsule" fromto="0 0 0 0.06 0 -0.20" size="0.020" mass="0.21" rgba="0.22 0.67 0.94 1" />
+            <body name="leg_a_knee_body" pos="0.06 0 -0.20">
+              <joint name="leg_a_knee" axis="0 1 0" range="0 115" />
+              <geom name="leg_a_shin" type="capsule" fromto="0 0 0 0.03 0 -0.20" size="0.016" mass="0.16" rgba="0.22 0.67 0.94 1" />
+              <geom name="leg_a_foot" type="sphere" pos="0.03 0 -0.20" size="0.040" mass="0.07" rgba="0.13 0.14 0.15 1" friction="1.55 0.006 0.0001" />
+              <site name="leg_a_foot_tip" pos="0.03 0 -0.20" size="0.013" rgba="0.22 0.67 0.94 1" />
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="leg_b_hip_yaw" pos="-0.0795000 0.1376980 -0.015" euler="0 0 120">
+        <joint name="leg_b_yaw" axis="0 0 1" range="-55 55" />
+        <geom type="sphere" size="0.026" mass="0.075" rgba="0.98 0.59 0.26 1" contype="0" conaffinity="0" />
+        <body name="leg_b_hip_roll">
+          <joint name="leg_b_roll" axis="1 0 0" range="-45 45" />
+          <geom type="sphere" size="0.022" mass="0.055" rgba="0.98 0.59 0.26 1" contype="0" conaffinity="0" />
+          <body name="leg_b_hip_pitch">
+            <joint name="leg_b_pitch" axis="0 1 0" range="-75 75" />
+            <geom name="leg_b_thigh" type="capsule" fromto="0 0 0 0.06 0 -0.20" size="0.020" mass="0.21" rgba="0.98 0.59 0.26 1" />
+            <body name="leg_b_knee_body" pos="0.06 0 -0.20">
+              <joint name="leg_b_knee" axis="0 1 0" range="0 115" />
+              <geom name="leg_b_shin" type="capsule" fromto="0 0 0 0.03 0 -0.20" size="0.016" mass="0.16" rgba="0.98 0.59 0.26 1" />
+              <geom name="leg_b_foot" type="sphere" pos="0.03 0 -0.20" size="0.040" mass="0.07" rgba="0.13 0.14 0.15 1" friction="1.55 0.006 0.0001" />
+              <site name="leg_b_foot_tip" pos="0.03 0 -0.20" size="0.013" rgba="0.98 0.59 0.26 1" />
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="leg_c_hip_yaw" pos="-0.0795000 -0.1376980 -0.015" euler="0 0 240">
+        <joint name="leg_c_yaw" axis="0 0 1" range="-55 55" />
+        <geom type="sphere" size="0.026" mass="0.075" rgba="0.48 0.82 0.45 1" contype="0" conaffinity="0" />
+        <body name="leg_c_hip_roll">
+          <joint name="leg_c_roll" axis="1 0 0" range="-45 45" />
+          <geom type="sphere" size="0.022" mass="0.055" rgba="0.48 0.82 0.45 1" contype="0" conaffinity="0" />
+          <body name="leg_c_hip_pitch">
+            <joint name="leg_c_pitch" axis="0 1 0" range="-75 75" />
+            <geom name="leg_c_thigh" type="capsule" fromto="0 0 0 0.06 0 -0.20" size="0.020" mass="0.21" rgba="0.48 0.82 0.45 1" />
+            <body name="leg_c_knee_body" pos="0.06 0 -0.20">
+              <joint name="leg_c_knee" axis="0 1 0" range="0 115" />
+              <geom name="leg_c_shin" type="capsule" fromto="0 0 0 0.03 0 -0.20" size="0.016" mass="0.16" rgba="0.48 0.82 0.45 1" />
+              <geom name="leg_c_foot" type="sphere" pos="0.03 0 -0.20" size="0.040" mass="0.07" rgba="0.13 0.14 0.15 1" friction="1.55 0.006 0.0001" />
+              <site name="leg_c_foot_tip" pos="0.03 0 -0.20" size="0.013" rgba="0.48 0.82 0.45 1" />
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="leg_a_yaw_servo" joint="leg_a_yaw" kp="75" kv="5.5" ctrllimited="true" ctrlrange="-0.9599 0.9599" forcelimited="true" forcerange="-24 24" />
+    <position name="leg_a_roll_servo" joint="leg_a_roll" kp="75" kv="5.5" ctrllimited="true" ctrlrange="-0.7853 0.7853" forcelimited="true" forcerange="-24 24" />
+    <position name="leg_a_pitch_servo" joint="leg_a_pitch" kp="85" kv="6.5" ctrllimited="true" ctrlrange="-1.3089 1.3089" forcelimited="true" forcerange="-30 30" />
+    <position name="leg_a_knee_servo" joint="leg_a_knee" kp="85" kv="5.0" ctrllimited="true" ctrlrange="0.0 2.007" forcelimited="true" forcerange="-30 30" />
+    <position name="leg_b_yaw_servo" joint="leg_b_yaw" kp="75" kv="5.5" ctrllimited="true" ctrlrange="-0.9599 0.9599" forcelimited="true" forcerange="-24 24" />
+    <position name="leg_b_roll_servo" joint="leg_b_roll" kp="75" kv="5.5" ctrllimited="true" ctrlrange="-0.7853 0.7853" forcelimited="true" forcerange="-24 24" />
+    <position name="leg_b_pitch_servo" joint="leg_b_pitch" kp="85" kv="6.5" ctrllimited="true" ctrlrange="-1.3089 1.3089" forcelimited="true" forcerange="-30 30" />
+    <position name="leg_b_knee_servo" joint="leg_b_knee" kp="85" kv="5.0" ctrllimited="true" ctrlrange="0.0 2.007" forcelimited="true" forcerange="-30 30" />
+    <position name="leg_c_yaw_servo" joint="leg_c_yaw" kp="75" kv="5.5" ctrllimited="true" ctrlrange="-0.9599 0.9599" forcelimited="true" forcerange="-24 24" />
+    <position name="leg_c_roll_servo" joint="leg_c_roll" kp="75" kv="5.5" ctrllimited="true" ctrlrange="-0.7853 0.7853" forcelimited="true" forcerange="-24 24" />
+    <position name="leg_c_pitch_servo" joint="leg_c_pitch" kp="85" kv="6.5" ctrllimited="true" ctrlrange="-1.3089 1.3089" forcelimited="true" forcerange="-30 30" />
+    <position name="leg_c_knee_servo" joint="leg_c_knee" kp="85" kv="5.0" ctrllimited="true" ctrlrange="0.0 2.007" forcelimited="true" forcerange="-30 30" />
+  </actuator>
+</mujoco>
