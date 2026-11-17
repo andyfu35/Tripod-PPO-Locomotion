@@ -93,3 +93,7 @@ It evolves 5,000 candidate policies on 16 CPU MuJoCo worlds for exactly 5,000,00
 ## SEGB V2: early-fall learning fix (5M steps)
 
 If the original SEGB policy repeatedly falls within one second, consult [README_SEGB_V2.md](README_SEGB_V2.md). The new experiment scores one uninterrupted life per gene, immediately replaces failed genes, and uses local mutations without changing the MuJoCo model or reward. Run `python3 diagnose_segb_v1.py` to inspect the original results and `bash run_segb_v2_5m.sh` for an independent V2 5-million-step run. PPO and SEGB V1 scripts and output directories are preserved.
+
+## SEGB H2-K6: inherited private history (5M control steps)
+
+This experiment branch provides the original H2-K6 per-Gene historical learning adapted to tripod physics. It restores all signed positive/negative private evidence, same-reset paired parent/child tests and genealogy-preserving inheritance, without changing PPO or the successful original robot environment. Run `bash run_segb_h2k6_5m.sh` or see [README_SEGB_H2K6.md](README_SEGB_H2K6.md).

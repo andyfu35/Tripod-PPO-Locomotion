@@ -8,3 +8,8 @@ baseline*/
 *.mp4
 *.log
 .DS_Store
+
+# H2-K6 independent outputs
+runs_segb_h2k6_*/
+results_segb_h2k6_*/
+results_h2k6_*/

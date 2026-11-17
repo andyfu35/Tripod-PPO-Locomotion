@@ -70,6 +70,7 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--model", help="v2 SB3 PPO .zip; omit for neutral baseline")
     p.add_argument("--segb-model", help="SEGB evolution champion .npz (same environment/reward)")
+    p.add_argument("--h2k6-model", help="SEGB H2-K6 GRU26 private-history policy .npz")
     p.add_argument("--random", action="store_true", help="Random baseline instead of neutral")
     p.add_argument("--stochastic", action="store_true", help="Sample PPO actions (default: deterministic mean)")
     p.add_argument("--episodes", type=int, default=10)
@@ -82,8 +83,8 @@ def main() -> None:
     p.add_argument("--video-width", type=int, default=720)
     p.add_argument("--video-height", type=int, default=540)
     args = p.parse_args()
-    if sum(bool(x) for x in (args.model, args.segb_model, args.random)) > 1:
-        p.error("Choose at most one of --model, --segb-model, --random")
+    if sum(bool(x) for x in (args.model, args.segb_model, args.h2k6_model, args.random)) > 1:
+        p.error("Choose at most one of --model, --segb-model, --h2k6-model, --random")
     if args.episodes < 1:
         p.error("--episodes must be positive")
     out = Path(args.out_dir)
@@ -108,6 +109,9 @@ def main() -> None:
     elif args.segb_model:
         from segb_core import SEGBPredictor
         policy = SEGBPredictor.load(args.segb_model)
+    elif args.h2k6_model:
+        from h2k6_tripod_core import GRU26Policy
+        policy = GRU26Policy.load(args.h2k6_model)
 
     env = TripodEnv(**env_kwargs)
     if policy is not None and policy.observation_space.shape != env.observation_space.shape:
@@ -119,6 +123,8 @@ def main() -> None:
     try:
         for ep in range(args.episodes):
             obs, _ = env.reset(seed=args.seed + ep)
+            if policy is not None and hasattr(policy, "reset"):
+                policy.reset(seed=args.seed + ep)
             rng = np.random.default_rng(args.seed + ep)
             rows = []
             total_reward = 0.0
@@ -200,7 +206,7 @@ def main() -> None:
             episode_summaries.append(stat)
             print(json.dumps(stat, ensure_ascii=False, indent=2))
         result = {
-            "policy": args.model or args.segb_model or ("random baseline" if args.random else "neutral baseline"),
+            "policy": args.model or args.segb_model or args.h2k6_model or ("random baseline" if args.random else "neutral baseline"),
             "episodes": episode_summaries,
             "mean_net_speed_mps": float(np.mean([s["net_speed_mps"] for s in episode_summaries])),
             "mean_survival_seconds": float(np.mean([s["seconds"] for s in episode_summaries])),
