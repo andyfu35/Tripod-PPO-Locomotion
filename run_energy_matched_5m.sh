@@ -42,7 +42,7 @@ python3 train_segb_h2k6_energy.py --total-steps 5000000 --worlds 16 \
 echo "=== EVALUATE PPO + SEGB with identical held-out reset seeds 100..109 ==="
 python3 evaluate.py --model "$PPO_DIR/tripod_ppo_final.zip" --episodes 10 \
   --seed 100 --out-dir results_ppo_energy_5m_seed0
-python3 evaluate.py --h2k6-model "$SEGB_DIR/best_stable_progress.npz" --episodes 10 \
+python3 evaluate.py --h2k6-model "$SEGB_DIR/best_stable_energy_aware.npz" --episodes 10 \
   --seed 100 --energy-weight "$ENERGY_WEIGHT" --energy-power-ref-w "$POWER_REF_W" \
   --out-dir results_segb_h2k6_energy_5m_seed0
 python3 compare_ppo_segb_energy.py \
@@ -53,7 +53,7 @@ python3 compare_ppo_segb_energy.py \
 python3 evaluate.py --model "$PPO_DIR/tripod_ppo_final.zip" \
   --episodes 1 --seed 100 --video --camera fixed \
   --out-dir results_ppo_energy_5m_video
-python3 evaluate.py --h2k6-model "$SEGB_DIR/best_stable_progress.npz" \
+python3 evaluate.py --h2k6-model "$SEGB_DIR/best_stable_energy_aware.npz" \
   --episodes 1 --seed 100 --video --camera fixed \
   --energy-weight "$ENERGY_WEIGHT" --energy-power-ref-w "$POWER_REF_W" \
   --out-dir results_segb_h2k6_energy_5m_video

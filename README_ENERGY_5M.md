@@ -35,6 +35,7 @@ Locked initial setting in `run_energy_matched_5m.sh`: **`energy_weight=0.10` and
 - This third axis is an **energy-aware locomotion** ability, not a bare low-work axis. Standing still with zero work gets 0 on the third axis, not a positive energy reward. Standstill may still be retained by the longevity axis, which is intentional.
 - H2-K6 `PrivatePsi` retains the original signed direction, 3-component positive/negative capability deltas, paired parent/child life counts, admitted status, and same-reset seed. The energy-aware direction is marked as useful only when the child lives at least as long as its parent. The PAES archive uses the 3D Pareto front and a three-dimensional depth=5 adaptive density grid.
 - **No old private histories are imported**: all genes are newborns. Archive is capped at 1,024.
+- The default reported SEGB policy is `best_stable_energy_aware` (highest energy-aware progress among complete training survivors); `best_stable_progress` and unrestricted `best_energy_aware` are also retained for diagnosis.
 - The checkpoint version is unique to energy experiments and rejects conflicting settings/XML. Restarting the wrapper resumes an interrupted matching SEGB energy checkpoint.
 
 ## Mac: run both from scratch
@@ -55,7 +56,7 @@ The wrapper trains **PPO first, SEGB second**, *not concurrently*, to avoid CPU 
 
 ```text
 runs_ppo_energy_5m_seed0/tripod_ppo_final.zip
-runs_segb_h2k6_energy_5m_seed0/best_stable_progress.npz
+runs_segb_h2k6_energy_5m_seed0/best_stable_energy_aware.npz
 runs_segb_h2k6_energy_5m_seed0/best_energy_aware.npz
 runs_segb_h2k6_energy_5m_seed0/checkpoint.npz
 runs_segb_h2k6_energy_5m_seed0/summary.json

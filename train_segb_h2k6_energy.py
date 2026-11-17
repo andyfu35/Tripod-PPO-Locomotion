@@ -388,6 +388,13 @@ def summarize(output: Path, cfg: Config, bank: PAESArchive,
     full = [g for g in genes if g.longevity >= 1-1e-9]
     champs["best_stable_progress"] = (max(full, key=lambda x:x.progress) if full
                                        else max(genes, key=lambda x:(x.longevity,x.progress)))
+    # Default energy benchmark: maximum useful locomotion after motor-work cost,
+    # restricted to full-horizon training survivors. This is only a presentation
+    # / held-out selection rule; the Pareto archive remains three-axis.
+    champs["best_stable_energy_aware"] = (
+        max(full, key=lambda x: (x.energy_aware_progress, x.progress)) if full
+        else max(genes, key=lambda x: (x.longevity, x.energy_aware_progress))
+    )
     for label, g in champs.items():
         export_policy(output/f"{label}.npz", g)
     fields = ["gene_id","parent_id","mode","steps","parent_steps","fell",

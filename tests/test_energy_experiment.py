@@ -179,6 +179,7 @@ class EnergyExperimentTests(unittest.TestCase):
             steps=train(cfg,pool=fake,verbose=False)
             self.assertEqual((steps,fake.steps),(101,101))
             self.assertEqual((Path(cfg.output)/'summary.json').exists(),True)
+            self.assertTrue((Path(cfg.output)/'best_stable_energy_aware.npz').is_file())
             self.assertTrue(all(s==t for s,t in fake.seeds))
             self.assertEqual(train(cfg,pool=fake,verbose=False),101)
             self.assertEqual(fake.steps,101)
