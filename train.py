@@ -22,6 +22,9 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--episode-steps", type=int, default=1000)
     p.add_argument("--alive-bonus", type=float, default=0.2)
+    p.add_argument("--energy-weight", type=float, default=0.0,
+                   help="Penalty for motor power relative to energy-power-ref-w; 0 preserves baseline")
+    p.add_argument("--energy-power-ref-w", type=float, default=50.0)
     p.add_argument("--action-tau", type=float, default=0.10)
     p.add_argument("--max-target-rate", type=float, default=2.5)
     p.add_argument("--save-every", type=int, default=500_000)
@@ -29,6 +32,8 @@ def main() -> None:
     p.add_argument("--resume", default=None, help="Only resume policies trained with v2 (51 obs)")
     p.add_argument("--out-dir", default="runs_c_16x1024_seed0")
     args = p.parse_args()
+    if args.energy_weight < 0 or args.energy_power_ref_w <= 0:
+        p.error("energy-weight must be nonnegative and energy-power-ref-w positive")
     if args.n_envs < 1 or args.timesteps < 1 or args.n_steps < 1:
         p.error("--n-envs, --n-steps and --timesteps must be positive")
     rollout = args.n_envs * args.n_steps
@@ -46,6 +51,8 @@ def main() -> None:
     env_kwargs = {
         "max_episode_steps": args.episode_steps,
         "alive_bonus": args.alive_bonus,
+        "energy_weight": args.energy_weight,
+        "energy_power_ref_w": args.energy_power_ref_w,
         "action_tau": args.action_tau,
         "max_target_rate": args.max_target_rate,
     }
@@ -62,6 +69,7 @@ def main() -> None:
     (out_dir / "train_config.json").write_text(json.dumps({
         "version": "tripod-v2-signed-progress-smoothed-servo",
         "experiment": "C-many-worlds-long-rollout",
+        "reward": "signed_radial_progress + alive_bonus - energy_weight * abs_joint_motor_work / (dt * energy_power_ref_w)",
         "requested_total_timesteps": args.timesteps,
         "rollout_samples_per_update": rollout,
         "expected_ppo_updates": updates,

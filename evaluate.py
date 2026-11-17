@@ -1,4 +1,4 @@
-"""Evaluate PPO, SEGB, neutral/random control with identical gait metrics."""
+"""Evaluate PPO, SEGB-H2K6, and neutral baseline with gait and motor-work metrics."""
 from __future__ import annotations
 
 import argparse
@@ -68,9 +68,12 @@ def open_video(env: TripodEnv, filename: Path, fps: int, width: int, height: int
 
 def main() -> None:
     p = argparse.ArgumentParser()
-    p.add_argument("--model", help="v2 SB3 PPO .zip; omit for neutral baseline")
-    p.add_argument("--segb-model", help="SEGB evolution champion .npz (same environment/reward)")
-    p.add_argument("--h2k6-model", help="SEGB H2-K6 GRU26 private-history policy .npz")
+    p.add_argument("--model", help="SB3 PPO .zip (env energy settings read from train_config.json)")
+    p.add_argument("--h2k6-model", help="SEGB-H2K6 GRU26 .npz model")
+    p.add_argument("--segb-model", help="Legacy SEGB V1/V2 .npz model")
+    p.add_argument("--energy-weight", type=float, default=None,
+                   help="Required for energy SEGB; PPO reads exact training setting")
+    p.add_argument("--energy-power-ref-w", type=float, default=None)
     p.add_argument("--random", action="store_true", help="Random baseline instead of neutral")
     p.add_argument("--stochastic", action="store_true", help="Sample PPO actions (default: deterministic mean)")
     p.add_argument("--episodes", type=int, default=10)
@@ -83,8 +86,12 @@ def main() -> None:
     p.add_argument("--video-width", type=int, default=720)
     p.add_argument("--video-height", type=int, default=540)
     args = p.parse_args()
-    if sum(bool(x) for x in (args.model, args.segb_model, args.h2k6_model, args.random)) > 1:
-        p.error("Choose at most one of --model, --segb-model, --h2k6-model, --random")
+    if sum(bool(a) for a in (args.model, args.h2k6_model, args.segb_model, args.random)) > 1:
+        p.error("Choose one of --model / --h2k6-model / --segb-model / --random")
+    if args.energy_weight is not None and args.energy_weight < 0:
+        p.error("Energy weight cannot be negative")
+    if args.energy_power_ref_w is not None and args.energy_power_ref_w <= 0:
+        p.error("Energy reference power must be positive")
     if args.episodes < 1:
         p.error("--episodes must be positive")
     out = Path(args.out_dir)
@@ -105,14 +112,47 @@ def main() -> None:
         if not str(config.get("version", "")).startswith("tripod-v2-"):
             raise ValueError(f"Not a v2 training config: {config_file}")
         env_kwargs = config["env_kwargs"]
+        if args.energy_weight is not None and abs(
+                args.energy_weight - float(env_kwargs.get("energy_weight", 0.0))) > 1e-12:
+            raise ValueError("PPO evaluation energy weight differs from training")
+        if args.energy_power_ref_w is not None and abs(
+                args.energy_power_ref_w - float(env_kwargs.get("energy_power_ref_w", 50.0))) > 1e-12:
+            raise ValueError("PPO evaluation power reference differs from training")
         policy = PPO.load(args.model, device="cpu")
-    elif args.segb_model:
-        from segb_core import SEGBPredictor
-        policy = SEGBPredictor.load(args.segb_model)
     elif args.h2k6_model:
         from h2k6_tripod_core import GRU26Policy
         policy = GRU26Policy.load(args.h2k6_model)
+        policy_path = Path(args.h2k6_model)
+        # Energy models are self-identifying (their Gene metadata has an
+        # energy-aware capability). Infer the exact penalty from the sibling
+        # training summary. Old no-energy H2K6 models remain fully compatible.
+        with np.load(policy_path, allow_pickle=False) as data:
+            meta = json.loads(str(data["meta"].item()))
+        if "energy_aware_progress" in meta:
+            summary_file = policy_path.parent / "summary.json"
+            if not summary_file.is_file():
+                if args.energy_weight is None or args.energy_power_ref_w is None:
+                    raise FileNotFoundError(
+                        "Energy H2K6 model requires its summary.json or explicit energy parameters")
+            else:
+                summary = json.loads(summary_file.read_text(encoding="utf-8"))
+                settings = summary["config"]
+                expected_weight = float(settings["energy_weight"])
+                expected_reference = float(settings["energy_power_ref_w"])
+                if args.energy_weight is not None and abs(args.energy_weight - expected_weight) > 1e-12:
+                    raise ValueError("H2K6 evaluation weight differs from training")
+                if args.energy_power_ref_w is not None and abs(args.energy_power_ref_w - expected_reference) > 1e-12:
+                    raise ValueError("H2K6 evaluation reference power differs from training")
+                args.energy_weight, args.energy_power_ref_w = expected_weight, expected_reference
+        elif args.energy_weight is not None and args.energy_weight != 0:
+            raise ValueError("Cannot evaluate old no-energy H2K6 model under changed energy reward")
+    elif args.segb_model:
+        from segb_core import SEGBPredictor
+        policy = SEGBPredictor.load(args.segb_model)
 
+    if (args.h2k6_model or args.segb_model or (not args.model and args.energy_weight is not None)):
+        env_kwargs["energy_weight"] = float(args.energy_weight or 0.0)
+        env_kwargs["energy_power_ref_w"] = float(args.energy_power_ref_w or 50.0)
     env = TripodEnv(**env_kwargs)
     if policy is not None and policy.observation_space.shape != env.observation_space.shape:
         raise ValueError(
@@ -128,6 +168,7 @@ def main() -> None:
             rng = np.random.default_rng(args.seed + ep)
             rows = []
             total_reward = 0.0
+            total_motor_work_j = 0.0
             distance_walked = 0.0
             last_xy = env.data.qpos[:2].copy()
             writer = renderer = camera = None
@@ -149,12 +190,15 @@ def main() -> None:
                     distance_walked += float(np.linalg.norm(xy - last_xy))
                     last_xy = xy
                     total_reward += reward
+                    total_motor_work_j += float(info["actuator_energy_j"])
                     contacts = env._foot_contacts()
                     row = {
                         "time_s": round((step + 1) * env.dt, 4),
                         "x_m": float(xy[0]), "y_m": float(xy[1]),
                         "z_m": float(env.data.qpos[2]),
                         "progress_speed_mps": info["progress_speed_mps"],
+                        "motor_power_w": info["actuator_power_w"],
+                        "motor_work_step_j": info["actuator_energy_j"],
                         "servo_target_change_rad": info["servo_target_change_rad"],
                         "mean_abs_joint_speed_radps": float(np.mean(np.abs(env.data.qvel[6:18]))),
                         "nonfoot_ground_contacts": info["nonfoot_ground_contacts"],
@@ -192,6 +236,10 @@ def main() -> None:
                 "seconds": duration,
                 "net_displacement_m": net,
                 "net_speed_mps": net / duration,
+                "fixed_horizon_speed_mps": net / (env.max_episode_steps*env.dt),
+                "motor_work_j": total_motor_work_j,
+                "mean_motor_power_w": total_motor_work_j / duration,
+                "motor_work_per_meter_j_m": total_motor_work_j / max(net, 1e-8),
                 "path_length_m": distance_walked,
                 "path_efficiency_0to1": net / max(distance_walked, 1e-8),
                 "mean_joint_speed_radps": float(np.mean([r["mean_abs_joint_speed_radps"] for r in rows])),
@@ -206,9 +254,14 @@ def main() -> None:
             episode_summaries.append(stat)
             print(json.dumps(stat, ensure_ascii=False, indent=2))
         result = {
-            "policy": args.model or args.segb_model or args.h2k6_model or ("random baseline" if args.random else "neutral baseline"),
+            "policy": args.model or args.h2k6_model or args.segb_model or ("random baseline" if args.random else "neutral baseline"),
             "episodes": episode_summaries,
             "mean_net_speed_mps": float(np.mean([s["net_speed_mps"] for s in episode_summaries])),
+            "mean_fixed_horizon_speed_mps": float(np.mean([s["fixed_horizon_speed_mps"] for s in episode_summaries])),
+            "mean_motor_work_j": float(np.mean([s["motor_work_j"] for s in episode_summaries])),
+            "mean_motor_power_w": float(np.mean([s["mean_motor_power_w"] for s in episode_summaries])),
+            "energy_weight": env.energy_weight,
+            "energy_power_ref_w": env.energy_power_ref_w,
             "mean_survival_seconds": float(np.mean([s["seconds"] for s in episode_summaries])),
             "survival_rate": float(np.mean([not s["fell"] for s in episode_summaries])),
         }

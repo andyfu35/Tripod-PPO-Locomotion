@@ -1,8 +1,8 @@
-"""Three-legged MuJoCo locomotion with a direction-free, two-term reward.
+"""Three-legged MuJoCo locomotion with an optional motor-work penalty.
 
-Reward: signed outward progress speed (m/s) + 0.2 while alive.
+Reward: signed radial speed + 0.2 alive - weighted absolute motor power.
 No prescribed gait, forward-heading command, action penalty, foot-contact
-reward, energy penalty, target posture reward, or movement symmetry reward.
+reward, gait bonus, target posture reward, or movement symmetry reward.
 
 Control: 12 desired joint positions, with servo-target lowpass/rate limiting.
 This avoids teleporting servo references every 20 ms; the physical robot
@@ -20,6 +20,7 @@ import numpy as np
 
 from generate_model import MODEL_PATH, generate_model
 from locomotion_math import signed_radial_progress_speed, filter_servo_targets
+from energy_math import absolute_mechanical_power_w, energy_penalty
 
 
 class TripodEnv(gym.Env):
@@ -28,6 +29,7 @@ class TripodEnv(gym.Env):
     def __init__(self, max_episode_steps: int = 1000, frame_skip: int = 10,
                  speed_weight: float = 1.0, alive_bonus: float = 0.2,
                  action_tau: float = 0.10, max_target_rate: float = 2.5,
+                 energy_weight: float = 0.0, energy_power_ref_w: float = 50.0,
                  model_path: str | Path | None = None):
         super().__init__()
         xml_path = Path(model_path) if model_path is not None else MODEL_PATH
@@ -44,6 +46,23 @@ class TripodEnv(gym.Env):
         self.alive_bonus = float(alive_bonus)
         self.action_tau = float(action_tau)
         self.max_target_rate = float(max_target_rate)
+        self.energy_weight = float(energy_weight)
+        self.energy_power_ref_w = float(energy_power_ref_w)
+        if (not math.isfinite(self.energy_weight) or self.energy_weight < 0
+                or not math.isfinite(self.energy_power_ref_w)
+                or self.energy_power_ref_w <= 0):
+            raise ValueError("energy_weight must be >=0 and energy_power_ref_w >0")
+        # Joint/gear assumptions are checked rather than indexing qvel[6:18]
+        # on faith. Position servos in generate_model.py have gear=1.
+        if not np.all(self.model.actuator_trntype == mujoco.mjtTrn.mjTRN_JOINT):
+            raise ValueError("Motor work proxy only supports joint actuators")
+        if not np.allclose(self.model.actuator_gear[:, 0], 1.0):
+            raise ValueError("Motor work proxy requires gear 1 joint servos")
+        self.actuated_dof_ids = self.model.jnt_dofadr[self.model.actuator_trnid[:, 0]].copy()
+        if len(set(map(int, self.actuated_dof_ids))) != self.model.nu:
+            raise ValueError("Expected one servo per independently driven joint")
+        self.physics_dt = float(self.model.opt.timestep)
+        self.episode_motor_energy_j = 0.0
         self.torso_id = self.model.body("torso").id
         self.ground_id = self.model.geom("ground").id
         self.foot_geom_ids = tuple(self.model.geom(f"leg_{tag}_foot").id for tag in "abc")
@@ -140,6 +159,7 @@ class TripodEnv(gym.Env):
         mujoco.mj_forward(self.model, self.data)
         mujoco.mj_step(self.model, self.data, nstep=25)
         self.episode_step = 0
+        self.episode_motor_energy_j = 0.0
         self.episode_start_xy = self.data.qpos[0:2].copy()
         if not self._is_alive():
             raise RuntimeError("Robot is already fallen at reset. Check geometry and neutral pose.")
@@ -158,21 +178,48 @@ class TripodEnv(gym.Env):
             self.actuator_lo, self.actuator_hi,
         )
         self.data.ctrl[:] = self.applied_targets
-        mujoco.mj_step(self.model, self.data, nstep=self.frame_skip)
+        motor_energy_j = 0.0
+        invalid_motor_state = False
+        if self.energy_weight > 0:
+            # Integrate actual abs(torque * angular_velocity) at EVERY physics
+            # substep (10 x 0.002 s), not only the final 50 Hz sample.
+            for _ in range(self.frame_skip):
+                mujoco.mj_step(self.model, self.data)
+                try:
+                    motor_energy_j += absolute_mechanical_power_w(
+                        self.data.actuator_force,
+                        self.data.qvel[self.actuated_dof_ids],
+                    ) * self.physics_dt
+                except ValueError:
+                    # If a solver state becomes non-finite, terminate instead
+                    # of poisoning PPO/SEGB observations or reward with NaN.
+                    invalid_motor_state = True
+            self.episode_motor_energy_j += motor_energy_j
+        else:
+            # Preserve existing PPO and H2K6 physics execution exactly.
+            mujoco.mj_step(self.model, self.data, nstep=self.frame_skip)
+        motor_power_w = motor_energy_j / self.dt
+        penalty = energy_penalty(motor_energy_j, self.dt,
+                                 weight=self.energy_weight,
+                                 reference_power_w=self.energy_power_ref_w)
         self.episode_step += 1
         speed = signed_radial_progress_speed(
             self.episode_start_xy, prev_xy, self.data.qpos[0:2], self.dt,
         )
-        alive = self._is_alive()
+        alive = self._is_alive() and not invalid_motor_state
         if not np.isfinite(speed):
             # Broken physics must not poison PPO with NaN rewards.
             speed = 0.0
             alive = False
-        reward = self.speed_weight * speed + self.alive_bonus * float(alive)
+        reward = self.speed_weight * speed + self.alive_bonus * float(alive) - penalty
         terminated = not alive
         truncated = self.episode_step >= self.max_episode_steps
         net_distance = float(np.linalg.norm(self.data.qpos[0:2] - self.episode_start_xy))
         info = {
+            "actuator_energy_j": float(motor_energy_j),
+            "actuator_power_w": float(motor_power_w),
+            "episode_actuator_energy_j": float(self.episode_motor_energy_j),
+            "energy_penalty": float(penalty),
             "progress_speed_mps": speed,
             "speed_mps": speed,  # backwards-compatible key; now SIGNED progress
             "net_distance_m": net_distance,
